@@ -16,9 +16,15 @@ import (
 )
 
 type Client struct {
-	status   bool
-	message  string
-	username string
+	status        bool
+	message       string
+	username      string
+	ch            chan string
+	wg            *sync.WaitGroup
+	socketChannel chan string
+	mainChannel   chan string
+	socketUrl     string
+	conn          *websocket.Conn
 }
 
 var done chan interface{}
@@ -43,7 +49,7 @@ func clientSocket() {
 
 	signal.Notify(interrupt, os.Interrupt) // Notify the interrupt channel for SIGINT
 
-	socketUrl := conf.CLIENT_HOST_PORT + "/socket"
+	socketUrl := conf.SERVER_URL
 	conn, _, err := websocket.DefaultDialer.Dial(socketUrl, nil)
 	if err != nil {
 		log.Fatal("Error connecting to Websocket Server:", err)
@@ -111,51 +117,52 @@ func ClientStart(username string) {
 	conf, _ := GetConfig()
 	client := Client{status: true, message: "Open", username: username}
 	fmt.Println(client.status, client.message)
-	ch := make(chan string)
-	wg := new(sync.WaitGroup)
-	socketChannel := make(chan string)
-	mainChannel := make(chan string)
-	socketUrl := conf.CLIENT_HOST_PORT + "/socket"
-	conn, _, err := websocket.DefaultDialer.Dial(socketUrl, nil)
+	client.ch = make(chan string)
+	client.wg = new(sync.WaitGroup)
+	client.socketChannel = make(chan string)
+	client.mainChannel = make(chan string)
+	client.socketUrl = conf.SERVER_URL
+	var err error
+	client.conn, _, err = websocket.DefaultDialer.Dial(client.socketUrl, nil)
 	if err != nil {
 		log.Fatal("Error connecting to Websocket Server:", err)
 	}
-	wg.Add(1)
+	client.wg.Add(1)
 	//go dummySocket(socketChannel, mainChannel, wg)
-	go socket(socketChannel, mainChannel, conn, wg)
-	wg.Add(3)
-	go recieveLoop(ch, socketChannel, wg)
-	go sendLoop(ch, mainChannel, conn, wg, username)
-	go programLoop(ch, wg)
-	wg.Wait()
+	go client.socket()
+	client.wg.Add(3)
+	go client.recieveLoop()
+	go client.sendLoop()
+	go client.programLoop()
+	client.wg.Wait()
 	fmt.Println("Exiting Skyline")
 }
 
-func recieveLoop(ch chan string, socketChannel chan string, wg *sync.WaitGroup) {
-	defer wg.Done()
+func (c *Client) recieveLoop() {
+	defer c.wg.Done()
 	for {
-		res, ok := <-socketChannel
+		res, ok := <-c.socketChannel
 		if !ok {
 			fmt.Println("Channel Close ", ok)
 			break
 		}
-		ch <- res
+		c.ch <- res
 	}
-	close(ch)
+	close(c.ch)
 }
 
-func sendLoop(ch chan string, mainChannel chan string, conn *websocket.Conn, wg *sync.WaitGroup, username string) {
-	defer wg.Done()
+func (c *Client) sendLoop() {
+	defer c.wg.Done()
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if line == ":quit" {
 			fmt.Println("Quitting...")
-			close(mainChannel)
+			close(c.mainChannel)
 			break
 		}
 		fmt.Printf("\033[F\033[K")
-		err := conn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("[%s]: %q\n", username, line))) //systemUser
+		err := c.conn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("[%s]: %q\n", c.username, line))) //systemUser
 		if err != nil {
 			log.Println("Error during writing to websocket:", err)
 			return
@@ -166,10 +173,10 @@ func sendLoop(ch chan string, mainChannel chan string, conn *websocket.Conn, wg 
 	}
 }
 
-func programLoop(ch chan string, wg *sync.WaitGroup) {
-	defer wg.Done()
+func (c *Client) programLoop() {
+	defer c.wg.Done()
 	for {
-		_, ok := <-ch
+		_, ok := <-c.ch
 		if !ok {
 			fmt.Println("Channel Close ", ok)
 			break
@@ -177,8 +184,8 @@ func programLoop(ch chan string, wg *sync.WaitGroup) {
 	}
 }
 
-func socket(socketChannel chan string, mainChannel chan string, conn *websocket.Conn, wg *sync.WaitGroup) {
-	defer wg.Done()
+func (c *Client) socket() {
+	defer c.wg.Done()
 	go func(conn *websocket.Conn) {
 		defer conn.Close()
 		for {
@@ -189,11 +196,11 @@ func socket(socketChannel chan string, mainChannel chan string, conn *websocket.
 			}
 			log.Printf("Received: %s", msg)
 		}
-	}(conn)
+	}(c.conn)
 	for {
-		_, ok := <-mainChannel
+		_, ok := <-c.mainChannel
 		if !ok {
-			close(socketChannel)
+			close(c.socketChannel)
 			break
 		}
 	}

@@ -7,8 +7,8 @@ import (
 
 type Specification struct {
 	SERVER_HOST_PORT string    `default:"localhost:8080"`
-	CLIENT_HOST_PORT string    `default:"ws://localhost:8080"`
-	LOG_LEVEL        log.Level `default:"info log.SetLevel()"`
+	SERVER_URL       string    `default:"ws://localhost:8080/socket"`
+	LOG_LEVEL        log.Level `default:"info" log.SetLevel()"`
 }
 
 func GetConfig() (Specification, error) {
