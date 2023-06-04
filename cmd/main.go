@@ -3,7 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
-	"skyline/internal"
+	"skyline/config"
+	"skyline/internal/client"
+	"skyline/internal/server"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -13,19 +15,22 @@ var username = flag.String("u", "", "user flag")
 var mode = flag.String("m", "", "server or client")
 
 func main() {
-	internal.GetLogger()
+	config.GetLogger()
 	flag.Parse()
 	log.Debugf("parsed flags: %s", *flagVerbose)
 	mode := *mode
 	switch mode {
 	case "server":
-		internal.ServerInit()
+		server.ServerInit()
 	case "client":
 		if len(*username) == 0 {
-			log.Fatal("Username required")
+			log.Error("username required")
+			log.Info("generating a user id")
+			username = client.GenerateUserID()
+			log.Info("username:", *username)
 		}
-		internal.ClientStart(*username)
+		client.ClientStart(*username)
 	default:
-		fmt.Println("Choose client or server")
+		fmt.Println("choose client or server")
 	}
 }

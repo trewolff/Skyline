@@ -1,4 +1,4 @@
-package internal
+package server
 
 import (
 	"errors"
@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"os"
 	"os/user"
+
+	"skyline/config"
 
 	log "github.com/sirupsen/logrus"
 
@@ -16,7 +18,7 @@ import (
 var connections map[uuid.UUID]*websocket.Conn
 
 func ServerInit() {
-	conf, _ := GetConfig()
+	conf, _ := config.GetConfig()
 	ConfigInit()
 	log.Debugln("debug")
 	connections = make(map[uuid.UUID]*websocket.Conn)
@@ -48,7 +50,7 @@ func socketHandler(w http.ResponseWriter, r *http.Request) {
 	// Upgrade our raw HTTP connection to a websocket based one
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Print("Error during connection upgradation:", err)
+		log.Error("Error during connection upgradation:", err)
 		return
 	}
 	defer conn.Close()
@@ -60,7 +62,7 @@ func socketHandler(w http.ResponseWriter, r *http.Request) {
 	for {
 		messageType, message, err := conn.ReadMessage()
 		if err != nil {
-			log.Println("Error during message reading:", err)
+			log.Error("Error during message reading:", err)
 			conn.Close()
 			delete(connections, connectionUUID)
 			break
@@ -69,7 +71,7 @@ func socketHandler(w http.ResponseWriter, r *http.Request) {
 		for _, c := range connections {
 			err = c.WriteMessage(messageType, message)
 			if err != nil {
-				log.Println("Error during message writing:", err)
+				log.Error("Error during message writing:", err)
 				break
 			}
 		}

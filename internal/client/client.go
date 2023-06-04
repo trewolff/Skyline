@@ -1,18 +1,17 @@
-package internal
+package client
 
 import (
 	"bufio"
 	"fmt"
 	"os"
 	"os/signal"
+	"skyline/config"
 	"sync"
-	"syscall"
 	"time"
-	"unsafe"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	log "github.com/sirupsen/logrus"
-	//tea "github.com/charmbracelet/bubbletea"
 )
 
 type Client struct {
@@ -43,7 +42,7 @@ func receiveHandler(connection *websocket.Conn) {
 }
 
 func clientSocket() {
-	conf, _ := GetConfig()
+	conf, _ := config.GetConfig()
 	done = make(chan interface{})    // Channel to indicate that the receiverHandler is done
 	interrupt = make(chan os.Signal) // Channel to listen for interrupt signal to terminate gracefully
 
@@ -91,30 +90,8 @@ func clientSocket() {
 	}
 }
 
-// CLient
-
-type winsize struct {
-	Row    uint16
-	Col    uint16
-	Xpixel uint16
-	Ypixel uint16
-}
-
-func getDimensions() (uint, uint) {
-	ws := &winsize{}
-	retCode, _, errno := syscall.Syscall(syscall.SYS_IOCTL,
-		uintptr(syscall.Stdin),
-		uintptr(syscall.TIOCGWINSZ),
-		uintptr(unsafe.Pointer(ws)))
-
-	if int(retCode) == -1 {
-		panic(errno)
-	}
-	return uint(ws.Row), uint(ws.Col)
-}
-
 func ClientStart(username string) {
-	conf, _ := GetConfig()
+	conf, _ := config.GetConfig()
 	client := Client{status: true, message: "Open", username: username}
 	fmt.Println(client.status, client.message)
 	client.ch = make(chan string)
@@ -204,4 +181,9 @@ func (c *Client) socket() {
 			break
 		}
 	}
+}
+
+func GenerateUserID() *string {
+	userID := uuid.New().String()
+	return &userID
 }

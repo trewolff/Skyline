@@ -1,4 +1,4 @@
-package internal
+package config
 
 import (
 	"github.com/kelseyhightower/envconfig"
@@ -8,7 +8,7 @@ import (
 type Specification struct {
 	SERVER_HOST_PORT string    `default:"localhost:8080"`
 	SERVER_URL       string    `default:"ws://localhost:8080/socket"`
-	LOG_LEVEL        log.Level `default:"info" log.SetLevel()"`
+	LOG_LEVEL        log.Level `default:"info" log:"log.SetLevel()"`
 }
 
 func GetConfig() (Specification, error) {
