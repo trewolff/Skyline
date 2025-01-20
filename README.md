@@ -15,3 +15,4 @@ Resides in memory. Does not store information.
 Encryption
 Audio
 Streaming audio
+GUI

@@ -24,7 +24,8 @@ func ServerInit() {
 	connections = make(map[uuid.UUID]*websocket.Conn)
 	http.HandleFunc("/socket", socketHandler)
 	http.HandleFunc("/", home)
-	err := http.ListenAndServe(conf.SERVER_HOST_PORT, nil)
+	log.Debugln("Server started at", conf.SERVER_HOST_PORT)
+	err := http.ListenAndServeTLS(conf.SERVER_HOST_PORT, "cert.pem", "key.pem", nil)
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}

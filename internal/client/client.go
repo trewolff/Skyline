@@ -2,10 +2,12 @@ package client
 
 import (
 	"bufio"
+	"crypto/tls"
 	"fmt"
 	"os"
 	"os/signal"
 	"skyline/config"
+	"strings"
 	"sync"
 	"time"
 
@@ -99,8 +101,13 @@ func ClientStart(username string) {
 	client.socketChannel = make(chan string)
 	client.mainChannel = make(chan string)
 	client.socketUrl = conf.SERVER_URL
+	if !strings.HasPrefix(client.socketUrl, "wss://") {
+		client.socketUrl = "wss://" + client.socketUrl
+	}
 	var err error
-	client.conn, _, err = websocket.DefaultDialer.Dial(client.socketUrl, nil)
+	dialer := websocket.DefaultDialer
+	dialer.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} // Adjust TLS settings as needed
+	client.conn, _, err = dialer.Dial(client.socketUrl, nil)
 	if err != nil {
 		log.Fatal("Error connecting to Websocket Server:", err)
 	}
