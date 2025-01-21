@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"os/user"
+	"sync"
 
 	"skyline/config"
 
@@ -15,17 +16,24 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-var connections map[uuid.UUID]*websocket.Conn
+var (
+	connections = make(map[uuid.UUID]*websocket.Conn)
+	connMutex   sync.Mutex
+	upgrader    = websocket.Upgrader{} // use default options
+)
 
 func ServerInit() {
-	conf, _ := config.GetConfig()
+	conf, err := config.GetConfig()
+	if err != nil {
+		log.Fatal("Error loading config: ", err)
+	}
 	ConfigInit()
 	log.Debugln("debug")
 	connections = make(map[uuid.UUID]*websocket.Conn)
 	http.HandleFunc("/socket", socketHandler)
 	http.HandleFunc("/", home)
 	log.Debugln("Server started at", conf.SERVER_HOST_PORT)
-	err := http.ListenAndServeTLS(conf.SERVER_HOST_PORT, "cert.pem", "key.pem", nil)
+	err = http.ListenAndServeTLS(conf.SERVER_HOST_PORT, "cert.pem", "key.pem", nil)
 	if err != nil {
 		log.Fatal("ListenAndServe: ", err)
 	}
@@ -43,9 +51,8 @@ func ConfigInit() {
 
 func initConfig() {
 	fmt.Println("Loading Config")
+	// TODO: Implement configuration file creation
 }
-
-var upgrader = websocket.Upgrader{} // use default options
 
 func socketHandler(w http.ResponseWriter, r *http.Request) {
 	// Upgrade our raw HTTP connection to a websocket based one
@@ -57,25 +64,54 @@ func socketHandler(w http.ResponseWriter, r *http.Request) {
 	defer conn.Close()
 
 	connectionUUID := uuid.New()
+	connMutex.Lock()
 	connections[connectionUUID] = conn
+	connMutex.Unlock()
+	log.Debugf("New WebSocket connection established with UUID: %s", connectionUUID)
 
-	// The event loop
+	var wg sync.WaitGroup
+	messageChan := make(chan []byte)
+
+	wg.Add(2)
+	go readMessages(conn, messageChan, &wg)
+	go broadcastMessages(messageChan, connectionUUID, &wg)
+
+	wg.Wait()
+	connMutex.Lock()
+	delete(connections, connectionUUID)
+	connMutex.Unlock()
+	conn.Close()
+}
+
+func readMessages(conn *websocket.Conn, messageChan chan []byte, wg *sync.WaitGroup) {
+	defer wg.Done()
+	defer close(messageChan)
 	for {
-		messageType, message, err := conn.ReadMessage()
+		_, message, err := conn.ReadMessage()
 		if err != nil {
 			log.Error("Error during message reading:", err)
-			conn.Close()
-			delete(connections, connectionUUID)
-			break
+			return
 		}
+		messageChan <- message
+	}
+}
+
+func broadcastMessages(messageChan chan []byte, connectionUUID uuid.UUID, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for message := range messageChan {
 		log.Printf("Received: %s", message)
-		for _, c := range connections {
-			err = c.WriteMessage(messageType, message)
-			if err != nil {
-				log.Error("Error during message writing:", err)
-				break
+		connMutex.Lock()
+		for uuid, c := range connections {
+			if uuid != connectionUUID {
+				go func(c *websocket.Conn) {
+					err := c.WriteMessage(websocket.TextMessage, message)
+					if err != nil {
+						log.Error("Error during message writing:", err)
+					}
+				}(c)
 			}
 		}
+		connMutex.Unlock()
 	}
 }
 

@@ -146,6 +146,7 @@ func (c *Client) sendLoop() {
 			break
 		}
 		fmt.Printf("\033[F\033[K")
+		fmt.Printf("[%s]: %q\n", c.username, line)
 		err := c.conn.WriteMessage(websocket.TextMessage, []byte(fmt.Sprintf("[%s]: %q\n", c.username, line))) //systemUser
 		if err != nil {
 			log.Println("Error during writing to websocket:", err)
@@ -178,7 +179,7 @@ func (c *Client) socket() {
 				log.Println("Error in receive:", err)
 				return
 			}
-			log.Printf("Received: %s", msg)
+			fmt.Printf("Received: %s", msg)
 		}
 	}(c.conn)
 	for {
